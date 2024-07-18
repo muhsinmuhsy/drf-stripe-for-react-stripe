@@ -13,27 +13,35 @@ logger = logging.getLogger(__name__)
 class CreateSubscription(APIView):
     def post(self, request):
         user_id = request.data.get('user_id')
+        email = request.data.get('email')
         payment_method_id = request.data.get('payment_method_id')
         price_id = request.data.get('price_id')
         logger.info(f'User ID: {user_id}, Payment Method ID: {payment_method_id}, Price ID: {price_id}')
         
         try:
-            custom_user = CustomUser.objects.get(user_id=user_id)
-        except CustomUser.DoesNotExist:
-            logger.error(f'User with ID {user_id} not found')
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        try:
-            customer = stripe.Customer.create(
-                email=custom_user.email,
-                payment_method=payment_method_id,
-                invoice_settings={'default_payment_method': payment_method_id}
+            custom_user, created = CustomUser.objects.get_or_create(
+                user_id=user_id,
+                defaults={'email': email}
             )
+
+            # Create a Stripe customer if needed
+            if created or not custom_user.stripe_customer_id:
+                customer = stripe.Customer.create(
+                    email=custom_user.email,
+                    payment_method=payment_method_id,
+                    invoice_settings={'default_payment_method': payment_method_id}
+                )
+                custom_user.stripe_customer_id = customer.id
+                custom_user.save()
+            else:
+                customer = stripe.Customer.retrieve(custom_user.stripe_customer_id)
+
             subscription = stripe.Subscription.create(
                 customer=customer.id,
                 items=[{'price': price_id}],
                 expand=['latest_invoice.payment_intent']
             )
+
             sub = Subscription(
                 custom_user=custom_user,
                 stripe_subscription_id=subscription.id
