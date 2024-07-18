@@ -51,3 +51,53 @@ class CreateSubscription(APIView):
         except Exception as e:
             logger.error(f'Stripe error: {str(e)}')
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class StripeWebhook(APIView):
+    def post(self, request, *args, **kwargs):
+        payload = request.body
+        sig_header = request.headers.get('Stripe-Signature')
+        endpoint_secret = settings.STRIPE_WEBHOOK_SECRET  # Add this to your settings.py
+
+        event = None
+
+        try:
+            # Verify the webhook signature
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, endpoint_secret
+            )
+        except ValueError as e:
+            # Invalid payload
+            logger.error(f'Invalid payload: {str(e)}')
+            return Response({'error': 'Invalid payload'}, status=status.HTTP_400_BAD_REQUEST)
+        except stripe.error.SignatureVerificationError as e:
+            # Invalid signature
+            logger.error(f'Invalid signature: {str(e)}')
+            return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Handle the event
+        if event['type'] == 'invoice.payment_succeeded':
+            invoice = event['data']['object']
+            # Handle successful payment here
+            logger.info(f'Payment succeeded for invoice: {invoice}')
+
+        elif event['type'] == 'customer.subscription.created':
+            subscription = event['data']['object']
+            # Handle subscription creation here
+            logger.info(f'Subscription created: {subscription}')
+
+        elif event['type'] == 'customer.subscription.updated':
+            subscription = event['data']['object']
+            # Handle subscription update here
+            logger.info(f'Subscription updated: {subscription}')
+
+        elif event['type'] == 'customer.subscription.deleted':
+            subscription = event['data']['object']
+            # Handle subscription cancellation here
+            logger.info(f'Subscription canceled: {subscription}')
+
+        else:
+            logger.info(f'Unhandled event type: {event["type"]}')
+
+        return Response({'status': 'success'}, status=status.HTTP_200_OK)
