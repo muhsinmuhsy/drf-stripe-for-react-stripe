@@ -19,12 +19,25 @@ class CreateSubscription(APIView):
         logger.info(f'User ID: {user_id}, Payment Method ID: {payment_method_id}, Price ID: {price_id}')
         
         try:
+            # Retrieve or create the CustomUser
             custom_user, created = CustomUser.objects.get_or_create(
                 user_id=user_id,
                 defaults={'email': email}
             )
 
-            # Create a Stripe customer if needed
+            # Update email if the user already exists and the email is different
+            if not created and custom_user.email != email:
+                custom_user.email = email
+                custom_user.save()
+
+                # Update email in Stripe if the customer exists
+                if custom_user.stripe_customer_id:
+                    stripe.Customer.modify(
+                        custom_user.stripe_customer_id,
+                        email=email
+                    )
+
+            # Create or retrieve Stripe customer
             if created or not custom_user.stripe_customer_id:
                 customer = stripe.Customer.create(
                     email=custom_user.email,
@@ -36,17 +49,20 @@ class CreateSubscription(APIView):
             else:
                 customer = stripe.Customer.retrieve(custom_user.stripe_customer_id)
 
+            # Create Stripe subscription
             subscription = stripe.Subscription.create(
                 customer=customer.id,
                 items=[{'price': price_id}],
                 expand=['latest_invoice.payment_intent']
             )
 
+            # Save the subscription in the database
             sub = Subscription(
                 custom_user=custom_user,
                 stripe_subscription_id=subscription.id
             )
             sub.save()
+
             return Response(subscription, status=status.HTTP_201_CREATED)
         except Exception as e:
             logger.error(f'Stripe error: {str(e)}')
