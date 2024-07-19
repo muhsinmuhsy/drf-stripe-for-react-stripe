@@ -23,3 +23,26 @@ This endpoint creates a new subscription for a user. If the user already exists,
   "payment_method_id": "string",
   "price_id": "string"
 }
+```
+
+### Eg
+
+```json
+{
+    "user_id":1234567,
+    "email":"user1234567@example.com",
+    "payment_method_id":"pm_1Pe7ujI2SPLgXlZ7M0kghXbb",
+    "price_id":"price_1PdTgoI2SPLgXlZ76UFwEJbA"
+}
+```
+
+### payment_method_id in response
+
+```json
+payment_intent: {
+    ...
+    payment_method: "pm_1Pe7ujI2SPLgXlZ7M0kghXbb",
+    ...
+}
+```
+
